@@ -39,24 +39,26 @@ export class ListService implements OnModuleInit {
   ): Promise<void> {
     let lensUsers: UserHandle[] = [] as UserHandle[];
 
+    this.logger.log('Fetching and saving users from Lens');
+
     const lastListed = await this.userListedRepository.findOne({
       where: { protocol: Protocol.Lens },
     });
 
+
     do {
       try {
         lensUsers = await this.userHandleRepository.find({
-          where: { id: MoreThan(lastListed?.userId || 0) },
+          where: { profileId: MoreThan(lastListed?.profileId || '0x0') },
           take: 100,
-          order: { id: 'ASC' },
+          order: { profileId: 'ASC' },
         });
 
-        await firstValueFrom(
-          this.httpService.post(
-            `${url}/lists`,
+
+        const result = await firstValueFrom(this.httpService.patch(
+            `${url}/lists/${list}`,
             {
-              items: lensUsers.map((user) => user.ownedBy),
-              key: list,
+              addItems: lensUsers.map((user) => user.ownedBy),
             },
             {
               headers: {
@@ -65,8 +67,7 @@ export class ListService implements OnModuleInit {
                 'Content-Type': 'application/json',
               },
             },
-          ),
-        );
+          ));
 
         await this.userListedRepository.save({
           userId: lensUsers[lensUsers.length - 1].id,

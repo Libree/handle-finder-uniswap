@@ -17,7 +17,4 @@ export class UserHandle {
   @Column()
   profileId: string;
 
-  @Column()
-  @Generated('increment')
-  id: number;
 }

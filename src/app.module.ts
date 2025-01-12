@@ -6,6 +6,7 @@ import { ConfigModule } from 'src/share/config.module';
 import { ConfigService } from 'src/share/config.service';
 import { UserListed } from './list/entities/user-listed.entity';
 import { ListModule } from './list/list.module';
+import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
   imports: [
@@ -19,10 +20,12 @@ import { ListModule } from './list/list.module';
         username: configService.get('db.user'),
         password: configService.get('db.password'),
         database: configService.get('db.name'),
+        ssl: configService.get('db.ssl'),
         entities: [Verification, UserHandle, UserListed],
       }),
     }),
     ListModule,
+    ScheduleModule.forRoot(),
   ],
   controllers: [],
   providers: [],

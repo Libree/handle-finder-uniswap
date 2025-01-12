@@ -6,14 +6,17 @@ import { ConfigModule } from 'src/share/config.module';
 import { ListService } from './list.service';
 import { ScheduleModule } from '@nestjs/schedule';
 import { UserListed } from './entities/user-listed.entity';
+import { HttpModule } from '@nestjs/axios';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Verification, UserHandle, UserListed]),
     ConfigModule,
     ScheduleModule,
+    HttpModule,
   ],
   controllers: [],
   providers: [ListService],
+  exports: [ListService],
 })
 export class ListModule {}
