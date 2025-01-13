@@ -94,7 +94,7 @@ export class ListService implements OnModuleInit {
         this.logger.error(
           `Error fetching and saving users from Lens: ${error.message}`,
         );
-        await sleep(10000);
+        await sleep(1000);
       }
     } while (lensUsers.length);
   }
@@ -114,15 +114,13 @@ export class ListService implements OnModuleInit {
     do {
       try {
         if (!lastListed?.timestamp) {
-          const firstFarcasterEntry = await this.verificationRepository.findOne(
-            {
-              order: {
-                createdAt: 'ASC',
-              },
+          const firstFarcasterEntry = await this.verificationRepository.find({
+            order: {
+              createdAt: 'ASC',
             },
-          );
+          });
 
-          timestamp = firstFarcasterEntry.createdAt;
+          timestamp = firstFarcasterEntry?.[0].createdAt;
         }
 
         farcasterUsers = await this.verificationRepository.find({
@@ -166,7 +164,7 @@ export class ListService implements OnModuleInit {
         this.logger.error(
           `Error fetching and saving users from Farcaster: ${error.message}`,
         );
-        await sleep(10000);
+        await sleep(1000);
       }
     } while (farcasterUsers.length);
   }
@@ -182,8 +180,11 @@ export class ListService implements OnModuleInit {
     const apiKey = this.configService.get<string>('keyNode.apiKey');
     const url = this.configService.get<string>('keyNode.url');
 
-    await this.fetchAndSaveUserLensList(url, apiKey, 'handle-finder');
-    await this.fetchAndSaveUserFarcasterList(url, apiKey, 'handle-finder');
+    await Promise.all([
+      this.fetchAndSaveUserLensList(url, apiKey, 'handle-finder'),
+      this.fetchAndSaveUserFarcasterList(url, apiKey, 'handle-finder'),
+    ]);
+
     this.isFetching = false;
   }
 }
