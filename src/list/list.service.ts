@@ -3,7 +3,7 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Verification } from './entities/verification.entity';
 import { UserHandle } from './entities/user-handle.entity';
-import { MoreThan, Repository } from 'typeorm';
+import { MoreThan, MoreThanOrEqual, Repository } from 'typeorm';
 import { LastProcessed } from './entities/last-proccesed.entity';
 import { Protocol } from 'src/common/types';
 import { ConfigService } from 'src/share/config.service';
@@ -59,7 +59,9 @@ export class ListService implements OnModuleInit {
         }
 
         lensUsers = await this.userHandleRepository.find({
-          where: { updatedAt: MoreThan(lastListed?.timestamp || timestamp) },
+          where: {
+            updatedAt: MoreThanOrEqual(lastListed?.timestamp || timestamp),
+          },
           take: 100,
           order: { profileId: 'ASC' },
         });
@@ -124,7 +126,9 @@ export class ListService implements OnModuleInit {
         }
 
         farcasterUsers = await this.verificationRepository.find({
-          where: { createdAt: MoreThan(lastListed?.timestamp || timestamp) },
+          where: {
+            createdAt: MoreThanOrEqual(lastListed?.timestamp || timestamp),
+          },
           take: 100,
           order: { id: 'ASC' },
         });
