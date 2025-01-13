@@ -4,7 +4,7 @@ import { Verification } from './list/entities/verification.entity';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule } from 'src/share/config.module';
 import { ConfigService } from 'src/share/config.service';
-import { UserListed } from './list/entities/user-listed.entity';
+import { LastProcessed } from './list/entities/last-proccesed.entity';
 import { ListModule } from './list/list.module';
 import { ScheduleModule } from '@nestjs/schedule';
 
@@ -21,7 +21,7 @@ import { ScheduleModule } from '@nestjs/schedule';
         password: configService.get('db.password'),
         database: configService.get('db.name'),
         ssl: configService.get('db.ssl'),
-        entities: [Verification, UserHandle, UserListed],
+        entities: [Verification, UserHandle, LastProcessed],
       }),
     }),
     ListModule,

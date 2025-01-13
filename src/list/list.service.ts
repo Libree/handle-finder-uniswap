@@ -4,7 +4,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Verification } from './entities/verification.entity';
 import { UserHandle } from './entities/user-handle.entity';
 import { MoreThan, Repository } from 'typeorm';
-import { UserListed } from './entities/user-listed.entity';
+import { LastProcessed } from './entities/last-proccesed.entity';
 import { Protocol } from 'src/common/types';
 import { ConfigService } from 'src/share/config.service';
 import { firstValueFrom } from 'rxjs';
@@ -20,8 +20,8 @@ export class ListService implements OnModuleInit {
     private readonly verificationRepository: Repository<Verification>,
     @InjectRepository(UserHandle)
     private readonly userHandleRepository: Repository<UserHandle>,
-    @InjectRepository(UserListed)
-    private readonly userListedRepository: Repository<UserListed>,
+    @InjectRepository(LastProcessed)
+    private readonly lastProcessedRepository: Repository<LastProcessed>,
     private readonly configService: ConfigService,
     private readonly httpService: HttpService,
   ) {}
@@ -38,24 +38,34 @@ export class ListService implements OnModuleInit {
     list: string,
   ): Promise<void> {
     let lensUsers: UserHandle[] = [] as UserHandle[];
+    let timestamp: Date;
 
     this.logger.log('Fetching and saving users from Lens');
 
-    const lastListed = await this.userListedRepository.findOne({
-      where: { protocol: Protocol.Lens },
+    const lastListed = await this.lastProcessedRepository.findOne({
+      where: { loader: Protocol.Lens },
     });
-
 
     do {
       try {
+        if (!lastListed?.timestamp) {
+          const firstLensEntry = await this.userHandleRepository.find({
+            order: {
+              updatedAt: 'ASC',
+            },
+          });
+
+          timestamp = firstLensEntry?.[0].updatedAt;
+        }
+
         lensUsers = await this.userHandleRepository.find({
-          where: { profileId: MoreThan(lastListed?.profileId || '0x0') },
+          where: { updatedAt: MoreThan(lastListed?.timestamp || timestamp) },
           take: 100,
           order: { profileId: 'ASC' },
         });
 
-
-        const result = await firstValueFrom(this.httpService.patch(
+        const result = await firstValueFrom(
+          this.httpService.patch(
             `${url}/lists/${list}`,
             {
               addItems: lensUsers.map((user) => user.ownedBy),
@@ -67,13 +77,19 @@ export class ListService implements OnModuleInit {
                 'Content-Type': 'application/json',
               },
             },
-          ));
+          ),
+        );
 
-        await this.userListedRepository.save({
-          userId: lensUsers[lensUsers.length - 1].id,
-          protocol: Protocol.Lens,
-          updatedAt: new Date(),
-        });
+        if (result.status === 200) {
+          await this.lastProcessedRepository.save({
+            loader: Protocol.Lens,
+            timestamp: lensUsers[lensUsers.length - 1].updatedAt,
+          });
+
+          this.logger.log(
+            `Saved ${lensUsers.length} users from Lens to list "${list}"`,
+          );
+        }
       } catch (error) {
         this.logger.error(
           `Error fetching and saving users from Lens: ${error.message}`,
@@ -88,25 +104,42 @@ export class ListService implements OnModuleInit {
     apiKey: string,
     list: string,
   ): Promise<void> {
-    let farcasterUser: Verification[] = [] as Verification[];
+    let farcasterUsers: Verification[] = [] as Verification[];
+    let timestamp: Date;
 
-    const lastListed = await this.userListedRepository.findOne({
-      where: { protocol: Protocol.Farcaster },
+    const lastListed = await this.lastProcessedRepository.findOne({
+      where: { loader: Protocol.Farcaster },
     });
 
     do {
       try {
-        farcasterUser = await this.verificationRepository.find({
-          where: { fid: MoreThan(lastListed?.userId || 0) },
+        if (!lastListed?.timestamp) {
+          const firstFarcasterEntry = await this.verificationRepository.findOne(
+            {
+              order: {
+                createdAt: 'ASC',
+              },
+            },
+          );
+
+          timestamp = firstFarcasterEntry.createdAt;
+        }
+
+        farcasterUsers = await this.verificationRepository.find({
+          where: { createdAt: MoreThan(lastListed?.timestamp || timestamp) },
           take: 100,
           order: { id: 'ASC' },
         });
 
-        await firstValueFrom(
+        farcasterUsers = farcasterUsers.filter(
+          (user) => user.address.length === 42,
+        );
+
+        const result = await firstValueFrom(
           this.httpService.post(
             `${url}/lists`,
             {
-              items: farcasterUser.map((user) => user.address),
+              items: farcasterUsers.map((user) => user.address),
               key: list,
             },
             {
@@ -119,18 +152,23 @@ export class ListService implements OnModuleInit {
           ),
         );
 
-        await this.userListedRepository.save({
-          userId: farcasterUser.length[farcasterUser.length - 1].id,
-          protocol: Protocol.Lens,
-          updatedAt: new Date(),
-        });
+        if (result.status === 200) {
+          await this.lastProcessedRepository.save({
+            timestamp: farcasterUsers[farcasterUsers.length - 1].createdAt,
+            loader: Protocol.Farcaster,
+          });
+
+          this.logger.log(
+            `Saved ${farcasterUsers.length} users from Farcaster to list "${list}"`,
+          );
+        }
       } catch (error) {
         this.logger.error(
           `Error fetching and saving users from Farcaster: ${error.message}`,
         );
         await sleep(10000);
       }
-    } while (farcasterUser.length);
+    } while (farcasterUsers.length);
   }
 
   @Cron(CronExpression.EVERY_DAY_AT_NOON)

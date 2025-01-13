@@ -5,12 +5,12 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule } from 'src/share/config.module';
 import { ListService } from './list.service';
 import { ScheduleModule } from '@nestjs/schedule';
-import { UserListed } from './entities/user-listed.entity';
+import { LastProcessed } from './entities/last-proccesed.entity';
 import { HttpModule } from '@nestjs/axios';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Verification, UserHandle, UserListed]),
+    TypeOrmModule.forFeature([Verification, UserHandle, LastProcessed]),
     ConfigModule,
     ScheduleModule,
     HttpModule,

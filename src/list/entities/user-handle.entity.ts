@@ -1,4 +1,4 @@
-import { Entity, PrimaryColumn, Column, Generated } from 'typeorm';
+import { Entity, PrimaryColumn, Column } from 'typeorm';
 
 @Entity()
 export class UserHandle {
@@ -16,5 +16,4 @@ export class UserHandle {
 
   @Column()
   profileId: string;
-
 }
