@@ -1,4 +1,4 @@
 export enum Protocol {
-  Lens = 0,
-  Farcaster = 1,
+  Lens = 'LAST_LENS',
+  Farcaster = 'LAST_FARCASTER',
 }
