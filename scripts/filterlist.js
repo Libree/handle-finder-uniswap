@@ -31,24 +31,23 @@ function parseBatchData(data) {
 }
 
 function main(stream) {
-    // If stream is configured with metadata in the body, the data may be nested under a `data` key
     const data = stream.data ? stream.data : stream;
+
+    const filterFrom = ['0x0000000000000000000000000000000000000000'];
+    const filterTo = ['0x000000000000000000000000000000000000dead'];
 
     try {
         const erc20Transfers = [];
-        const erc721Transfers = [];
-        const erc1155Transfers = [];
+        const setAddresses = new Set([
+            ...qnGetList('handle-finder-lens'),
+            ...qnGetList('handle-finder-farcaster'),
+        ]);
 
         data.forEach(stream => {
             if (!stream || !stream.block || !stream.receipts) {
                 return;
             }
 
-
-            results.qnGetList = qnGetList('handle-finder')
-
-            console.log('erc20Transfers:', erc20Transfers);
-            
             const blockTimestamp = stream.block.timestamp ? parseInt(stream.block.timestamp, 16) * 1000 : Date.now();
 
             stream.receipts.forEach(receipt => {
@@ -56,6 +55,12 @@ function main(stream) {
 
                 receipt.logs.forEach(log => {
                     if (!log || !log.topics || log.topics.length === 0) return;
+
+                    if (!setAddresses.has(stripPadding(log.topics[2]))) return;
+
+                    if (filterFrom.includes(stripPadding(log.topics[1])) || filterTo.includes(stripPadding(log.topics[2]))) {
+                        return;
+                    }
 
                     if (log.topics[0] === '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef') {
                         if (log.topics.length === 3 && log.data && log.data !== '0x') {
@@ -71,66 +76,18 @@ function main(stream) {
                                 txIndex: log.transactionIndex,
                                 blockTimestamp: blockTimestamp
                             });
-                        } else if (log.topics.length === 4 && (!log.data || log.data === '0x')) {
-                            const tokenId = BigInt(log.topics[3]).toString();
-                            erc721Transfers.push({
-                                type: 'ERC721',
-                                sender: stripPadding(log.topics[1]),
-                                receiver: stripPadding(log.topics[2]),
-                                tokenId: tokenId,
-                                contract: log.address,
-                                txHash: log.transactionHash,
-                                txIndex: log.transactionIndex,
-                                blockTimestamp: blockTimestamp
-                            });
                         }
-                    } else if (log.topics[0] === '0xc3d58168c5ae7397731d063d5bbf3d657854427343f4c083240f7aacaa2d0f62') {
-                        const { tokenId, value } = parseSingleData(log.data);
-                        erc1155Transfers.push({
-                            type: 'ERC1155_Single',
-                            operator: stripPadding(log.topics[1]),
-                            sender: stripPadding(log.topics[2]),
-                            receiver: stripPadding(log.topics[3]),
-                            tokenId: tokenId.toString(),
-                            value: value.toString(),
-                            contract: log.address,
-                            txHash: log.transactionHash,
-                            txIndex: log.transactionIndex,
-                            blockTimestamp: blockTimestamp
-                        });
-                    } else if (log.topics[0] === '0x4a39dc06d4c0dbc64b70af90fd698a233a518aa5d07e595d983b8c0526c8f7fb') {
-                        const { ids, values } = parseBatchData(log.data);
-                        ids.forEach((id, index) => {
-                            erc1155Transfers.push({
-                                type: 'ERC1155_Batch',
-                                operator: stripPadding(log.topics[1]),
-                                from: stripPadding(log.topics[2]),
-                                to: stripPadding(log.topics[3]),
-                                tokenId: id.toString(),
-                                value: values[index].toString(),
-                                contract: log.address,
-                                txHash: log.transactionHash,
-                                txIndex: log.transactionIndex,
-                                blockTimestamp: blockTimestamp
-                            });
-                        });
                     }
                 });
             });
         });
 
-        console.log('ERC20 Transfers:', erc20Transfers);
-        console.log('ERC721 Transfers:', erc721Transfers);
-        console.log('ERC1155 Transfers:', erc1155Transfers);
-
-        if (!erc20Transfers.length && !erc721Transfers.length && !erc1155Transfers.length) {
+        if (!erc20Transfers.length) {
             return null;
         }
 
-        return { 
-            erc20: erc20Transfers, 
-            erc721: erc721Transfers, 
-            erc1155: erc1155Transfers
+        return {
+            erc20: erc20Transfers
         };
     } catch (e) {
         console.error('Error in main function:', e);

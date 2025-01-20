@@ -38,7 +38,7 @@ export class ListService implements OnModuleInit {
     list: string,
   ): Promise<void> {
     let lensUsers: UserHandle[] = [] as UserHandle[];
-    let timestamp: Date;
+    let currentTimestamp: Date;
 
     this.logger.log('Fetching and saving users from Lens');
 
@@ -48,29 +48,32 @@ export class ListService implements OnModuleInit {
 
     do {
       try {
-        if (!lastListed?.timestamp) {
+        if (!lastListed?.timestamp && !currentTimestamp) {
+          this.logger.log('No last timestamp, fetching first lens entry');
           const firstLensEntry = await this.userHandleRepository.find({
-            order: {
-              updatedAt: 'ASC',
-            },
+            order: { updatedAt: 'ASC' },
+            take: 1,
           });
-
-          timestamp = firstLensEntry?.[0].updatedAt;
+          currentTimestamp = firstLensEntry?.[0]?.updatedAt;
+        } else {
+          currentTimestamp = lastListed?.timestamp || currentTimestamp;
         }
+
+        this.logger.log(`Uploading users from ${currentTimestamp}`);
 
         lensUsers = await this.userHandleRepository.find({
           where: {
-            updatedAt: MoreThanOrEqual(lastListed?.timestamp || timestamp),
+            updatedAt: MoreThanOrEqual(currentTimestamp),
           },
-          take: 100,
-          order: { profileId: 'ASC' },
+          take: 1000,
+          order: { updatedAt: 'ASC' },
         });
 
         const result = await firstValueFrom(
           this.httpService.patch(
             `${url}/lists/${list}`,
             {
-              addItems: lensUsers.map((user) => user.ownedBy),
+              addItems: lensUsers.map((user) => user.ownedBy.toLowerCase()),
             },
             {
               headers: {
@@ -83,9 +86,11 @@ export class ListService implements OnModuleInit {
         );
 
         if (result.status === 200) {
+          currentTimestamp = lensUsers[lensUsers.length - 1].updatedAt;
+          
           await this.lastProcessedRepository.save({
             loader: Protocol.Lens,
-            timestamp: lensUsers[lensUsers.length - 1].updatedAt,
+            timestamp: currentTimestamp,
           });
 
           this.logger.log(
@@ -106,8 +111,8 @@ export class ListService implements OnModuleInit {
     apiKey: string,
     list: string,
   ): Promise<void> {
-    let farcasterUsers: Verification[] = [] as Verification[];
-    let timestamp: Date;
+    let farcasterUsers: Verification[] = [];
+    let currentTimestamp: Date;
 
     const lastListed = await this.lastProcessedRepository.findOne({
       where: { loader: Protocol.Farcaster },
@@ -115,22 +120,25 @@ export class ListService implements OnModuleInit {
 
     do {
       try {
-        if (!lastListed?.timestamp) {
+        if (!lastListed?.timestamp && !currentTimestamp) {
           const firstFarcasterEntry = await this.verificationRepository.find({
-            order: {
-              createdAt: 'ASC',
-            },
+            order: { createdAt: 'ASC' },
+            take: 1,
           });
 
-          timestamp = firstFarcasterEntry?.[0].createdAt;
+          currentTimestamp = firstFarcasterEntry?.[0]?.createdAt;
+        } else {
+          currentTimestamp = lastListed?.timestamp || currentTimestamp;
         }
+
+        this.logger.log(`Uploading users from ${currentTimestamp}`);
 
         farcasterUsers = await this.verificationRepository.find({
           where: {
-            createdAt: MoreThanOrEqual(lastListed?.timestamp || timestamp),
+            createdAt: MoreThanOrEqual(currentTimestamp),
           },
-          take: 100,
-          order: { id: 'ASC' },
+          take: 1000,
+          order: { createdAt: 'ASC' },
         });
 
         farcasterUsers = farcasterUsers.filter(
@@ -141,7 +149,7 @@ export class ListService implements OnModuleInit {
           this.httpService.post(
             `${url}/lists`,
             {
-              items: farcasterUsers.map((user) => user.address),
+              items: farcasterUsers.map((user) => user.address.toLowerCase()),
               key: list,
             },
             {
@@ -155,9 +163,11 @@ export class ListService implements OnModuleInit {
         );
 
         if (result.status === 200) {
+          currentTimestamp = farcasterUsers[farcasterUsers.length - 1].createdAt;
+          
           await this.lastProcessedRepository.save({
-            timestamp: farcasterUsers[farcasterUsers.length - 1].createdAt,
             loader: Protocol.Farcaster,
+            timestamp: currentTimestamp,
           });
 
           this.logger.log(
@@ -185,8 +195,8 @@ export class ListService implements OnModuleInit {
     const url = this.configService.get<string>('keyNode.url');
 
     await Promise.all([
-      this.fetchAndSaveUserLensList(url, apiKey, 'handle-finder'),
-      this.fetchAndSaveUserFarcasterList(url, apiKey, 'handle-finder'),
+      this.fetchAndSaveUserLensList(url, apiKey, 'handle-finder-lens'),
+      this.fetchAndSaveUserFarcasterList(url, apiKey, 'handle-finder-farcaster'),
     ]);
 
     this.isFetching = false;
